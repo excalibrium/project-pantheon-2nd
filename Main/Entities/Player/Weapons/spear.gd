@@ -1,5 +1,5 @@
 extends Weapon
-class_name CometSpear
+class_name CometSpearold
 
 @export var hurtbox: Area3D
 

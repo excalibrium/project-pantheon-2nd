@@ -1,5 +1,5 @@
 extends Weapon
-class_name BoTRK
+class_name BoTRKold
 
 @export var hurtbox: Area3D
 
@@ -36,9 +36,11 @@ func _physics_process(delta):
 			if hitCD >= hitCD_cap:
 				if prevhit.offhand.Active == false:
 					prevhit.damage_by(attack_damage * attack_multiplier)
-					owner.instaslow = true
-					prevhit.instaslow = true
-					await get_tree().create_timer(0.1).timeout
+					if owner.instaslow == false:
+						owner.instaslow = true
+					if prevhit.instaslow == false:
+						prevhit.instaslow = true
+					await get_tree().create_timer(0.05).timeout
 					owner.instaslow = false
 					prevhit.instaslow = false
 				else:

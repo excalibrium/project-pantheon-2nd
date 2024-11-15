@@ -1,8 +1,16 @@
-[gd_scene load_steps=6 format=3 uid="uid://caqxfqurbp3ku"]
+[gd_scene load_steps=7 format=3 uid="uid://caqxfqurbp3ku"]
 
 [ext_resource type="PackedScene" uid="uid://bhums0j31gm5n" path="res://addons/proton_scatter/demos/assets/models/pine_tree.glb" id="1_hw1e5"]
-[ext_resource type="Material" uid="uid://d01d0h08lqqn6" path="res://addons/proton_scatter/demos/assets/materials/m_trunk.tres" id="2_cgtpc"]
+[ext_resource type="Shader" path="res://addons/proton_scatter/demos/assets/materials/testveg.gdshader" id="2_2f15f"]
 [ext_resource type="Material" uid="uid://d28lq2qtgdyie" path="res://addons/proton_scatter/demos/assets/materials/m_pine_leaves.tres" id="2_xnytt"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_4276l"]
+render_priority = 0
+shader = ExtResource("2_2f15f")
+shader_parameter/alpha_scissor_threshold = null
+shader_parameter/wind_speed = 1.0
+shader_parameter/wind_strength = 0.5
+shader_parameter/wind_direction = Vector2(0.001, 0)
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_2xqpo"]
 radius = 0.0750397
@@ -15,7 +23,7 @@ height = 0.489166
 [node name="pine_tree" instance=ExtResource("1_hw1e5")]
 
 [node name="Trunk" parent="." index="0"]
-surface_material_override/0 = ExtResource("2_cgtpc")
+surface_material_override/0 = SubResource("ShaderMaterial_4276l")
 
 [node name="Leaves" parent="." index="1"]
 surface_material_override/0 = ExtResource("2_xnytt")

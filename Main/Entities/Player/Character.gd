@@ -2,7 +2,7 @@ extends CharacterBody3D
 
 class_name Character 
 
-const SPEED = 1.5
+const SPEED = 2.0
 const JUMP_VELOCITY = 4.0
 
 
@@ -39,13 +39,14 @@ var movement_lock = false
 var action_bar = 0
 var instaslow := false
 var attackCompensation
+var throwableScene = preload("res://Main/Entities/throwable.tscn")
 var spearScene = preload("res://Main/Entities/Player/Weapons/spear.tscn")
 var botrkScene = preload("res://Main/Entities/Player/Weapons/BladeOfTheRuinedKing.tscn")
 var fistScene = preload("res://Main/Entities/Player/Weapons/fists.tscn")
 var LeftHandItem : String
 var RightHandItem : String
 var canBeDamaged
-
+var lock_on : bool = false
 @export var curiosityFactor := 1.0
 @export var object_name := "the wind"
 @export var threat_level := 0.0
@@ -61,7 +62,7 @@ func _physics_process(delta):
 
 func death():
 	
-	global_position = Vector3(6,2,6)
+	global_position = Vector3(0,1,-200)
 	reset()
 	
 func reset():
@@ -70,3 +71,4 @@ func reset():
 	velocity = Vector3.ZERO
 	attacking = false
 	is_blocking = false
+	stunned = false

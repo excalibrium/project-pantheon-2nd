@@ -7,6 +7,8 @@ var opose
 @export var bone: String
 @export var setzero: bool
 @export var setreal: bool
+@export var setreal_except_y: bool
+@export var setreal_except_yx: bool
 
 func _process(delta: float) -> void:
 	if setzero == true:
@@ -15,6 +17,11 @@ func _process(delta: float) -> void:
 	if setreal == true:
 		#print(Skewer.transform)
 		Skewer.transform = opose
+	if setreal_except_y == true:
+		Skewer.transform.origin = opose.origin
+		Skewer.rotation.x = opose.basis.get_euler().x
+		Skewer.rotation.z = opose.basis.get_euler().z
+
 func _process_modification() -> void:
 	var skeleton: Skeleton3D = get_skeleton()
 	if !skeleton:

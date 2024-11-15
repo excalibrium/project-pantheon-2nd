@@ -5,6 +5,7 @@ class_name Weapon
 @onready var hitboxes: Array = []
 @export var attack_damage := 10.0
 @export var attack_multiplier := 1.0
+@export var length := 3.0
 var guard_break = false
 var neotgtwjs
 var in_area := false
@@ -12,6 +13,7 @@ var incheck
 var prevhit
 var hitCD := 0.0
 var hitCD_cap := 0.125
+var thrown := false
 @export var trails := false
 @export var trail : GPUTrail3D
 func _physics_process(delta):

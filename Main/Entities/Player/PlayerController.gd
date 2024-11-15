@@ -2,6 +2,12 @@ extends Character
 
 class_name PlayerController
 
+var MOVE_BOOL : bool = !staggered and is_moving == true and attacking == false and is_blocking == false and is_running == false and speed < 4.8 and is_on_floor()
+var IDLE_BOOL : bool = velocity.y <= 0 and !staggered and is_moving == false and attacking == false and is_blocking == false and is_running == false and in_mode == false
+
+var two_fps_counter := 0.0
+var throwing := false
+@export var max_lock_range : float = 25.0
 @export var ps : Node3D
 @export var raycast_ground : RayCast3D
 var player_no: Array #a mechanic that may help me later on. What? planning to add multiplayer? lol
@@ -10,6 +16,7 @@ var player_no: Array #a mechanic that may help me later on. What? planning to ad
 @onready var _animationPlayer = $BaseModel3D/MeshInstance3D/AnimationPlayer
 var state_machine
 var current_state
+@onready var cam = $Camera/Camera3D
 @onready var staminabar = $HUD/StaminaBar
 @onready var healthbar = $HUD/HealthBar
 var speed_multiplier = 1.0
@@ -22,6 +29,7 @@ var rightclick = false
 var lockOn = false
 var enemies = []
 var closest_enemy
+var closest_enemy_body
 var current_path := []
 var speed
 var time_since_actionbar_halt = 0.3
@@ -37,6 +45,7 @@ var RMPos: Vector3
 var lhi = 1
 var currentanimplayer
 var prev_weapon
+var throwable
 var cometspear
 var botrk
 var fists
@@ -54,8 +63,10 @@ var jump_activation : bool
 var time_since_jump_buffer : float
 var distance_to_ground : float
 var is_on_air := false
+
+var throw_timer := 0.0
 func _ready():
-	Engine.time_scale = 1
+	Engine.time_scale = 1.0
 	if currentweapon == null:
 		LeftHandItem = "Fists"
 		fists = fistScene.instantiate()
@@ -70,36 +81,29 @@ func _ready():
 	staminabar.init_stamina(stamina)
 	healthbar.init_health(health)
 func _input(event):
+	if event.is_action_pressed("x"):
+		if throwing == true:
+			state_machine.travel("throw")
+	if event.is_action_pressed("R"):
+		throwing = not throwing
+		if LeftHandItem == "CometSpear" and throwing == false:
+			$BaseModel3D/MeshInstance3D/Bones_arm/Skeleton3D/CustomModifier.influence = 0.45
+			currentweapon.position = Vector3(0.28, 0.1, -0.04)
+			currentweapon.rotation = Vector3(deg_to_rad(11), deg_to_rad(2), deg_to_rad(-90))
+		if LeftHandItem == "CometSpear" and throwing == true:
+			$BaseModel3D/MeshInstance3D/Bones_arm/Skeleton3D/CustomModifier.influence = 0.5
+			currentweapon.position = Vector3(-0.02, 0.078, -0.03)
+			currentweapon.rotation = Vector3(deg_to_rad(11), deg_to_rad(175.0), deg_to_rad(-95.0))
+
 	if event.is_action_pressed("1") and LeftHandItem != "CometSpear" and !attacking:
-		prev_weapon = currentweapon
-		LeftHandItem = "CometSpear"
-		cometspear = spearScene.instantiate()
-		LHI_bone.remove_child(prev_weapon)
-		LHI_bone.add_child(cometspear)
-		currentweapon = LHI_bone.get_child(0)
-		currentweapon.position = Vector3(0.28, 0.1, -0.04)
-		currentweapon.rotation = Vector3(deg_to_rad(11), deg_to_rad(2), deg_to_rad(-90))
-
+		set_weapon("CometSpear")
 	if event.is_action_pressed("2") and LeftHandItem != "BoTRK" and !attacking:
-		prev_weapon = currentweapon
-		LeftHandItem = "BoTRK"
-		botrk = botrkScene.instantiate()
-		LHI_bone.remove_child(prev_weapon)
-		LHI_bone.add_child(botrk)
-		currentweapon = LHI_bone.get_child(0)
-		currentweapon.position = Vector3(-0.108, 0.1, -0.05)
-		currentweapon.rotation = Vector3(deg_to_rad(-0.7), deg_to_rad(-12.4), deg_to_rad(-87.6))
-
+		set_weapon("BoTRK")
 	if event.is_action_pressed("0") and LeftHandItem != "Fists" and !attacking:
-		prev_weapon = currentweapon
-		LeftHandItem = "Fists"
-		fists = fistScene.instantiate()
-		LHI_bone.remove_child(prev_weapon)
-		LHI_bone.add_child(fists)
-		currentweapon = LHI_bone.get_child(0)
+		set_weapon("Fist")
 
 	if event.is_action_pressed("Q"):
-		if lockOn == false:
+		if lockOn == false and closest_enemy and closest_enemy.global_position.distance_to(global_position) < max_lock_range:
 			lockOn = true
 		elif lockOn == true:
 			lockOn = false
@@ -107,6 +111,22 @@ func _input(event):
 		get_tree().quit()
 		return
 func _process(delta):
+	if two_fps_counter < 0.5:
+		two_fps_counter += delta
+	if two_fps_counter >= 0.5:
+		two_fps()
+		two_fps_counter = 0
+	#$Throw_test.global_rotation = $BaseModel3D/MeshInstance3D.global_rotation
+	#$Throw_test.global_position = $Thrown.global_position
+	#print($BaseModel3D/MeshInstance3D/Bones_arm/Skeleton3D/CustomModifier.influence)
+	IDLE_BOOL = velocity.y <= 0 and !staggered and is_moving == false and attacking == false and is_blocking == false and is_running == false and in_mode == false
+	MOVE_BOOL = !staggered and is_moving == true and attacking == false and is_blocking == false and is_running == false and speed < 4.8 and is_on_floor()
+	if MOVE_BOOL == true:
+		animationTree.set("parameters/StateMachine/blend1d/blend_position", 1)
+		animationTree.set("parameters/StateMachine/blend1d2/blend_position", 1)
+	elif IDLE_BOOL == true:
+		animationTree.set("parameters/StateMachine/blend1d/blend_position", -1)
+		animationTree.set("parameters/StateMachine/blend1d2/blend_position", -1)
 	#print(global_dir)
 	$BaseModel3D.set_quaternion($BaseModel3D.get_quaternion() * animationTree.get_root_motion_rotation())
 	RMPos = (animationTree.get_root_motion_rotation_accumulator().inverse() * get_quaternion()) * animationTree.get_root_motion_position()
@@ -123,13 +143,13 @@ func _process(delta):
 		distance_to_ground = global_position.distance_to(raycast_ground.get_collision_point())
 	else:
 		distance_to_ground = 100
+	if distance_to_ground < 1.01 and velocity.y <= 0:
+		is_on_air = false
 	current_state = state_machine.get_current_node()
 	current_path = state_machine.get_travel_path()
 	_handle_variables(delta)
 	_handle_detection()
-
 func _physics_process(delta):
-	
 	_handle_movement(delta)
 	_handle_combat(delta)
 	_handle_animations(delta)
@@ -142,8 +162,8 @@ func _handle_detection():
 		var distance = position.distance_to(enemy.position)
 		if distance < closest_distance:
 			closest_distance = distance
-			closest_enemy = enemy
-			
+			closest_enemy_body = enemy
+	#print(closest_enemy_body)
 	if closest_enemy != null:
 		$enemy_radar.look_at(closest_enemy.global_transform.origin, Vector3.UP)
 		$enemy_radar.rotation.y -= PI
@@ -151,6 +171,9 @@ func _handle_detection():
 
 
 func _handle_movement(delta):
+		
+	if velocity.y <= 0 and current_state == "walk_to_jump" and is_on_floor() and jump_time > 0.2667:
+		state_machine.travel("jump_to_walk")
 	raycast_ground.global_rotation_degrees.y += 15
 	wrapf(raycast_ground.global_rotation_degrees.y, -360, 360)
 	#if is_on_air == true:
@@ -171,23 +194,32 @@ func _handle_movement(delta):
 	
 	var bone_rot = $UpperBody_skewer.rotation
 
-	if lockOn == true:
+	if lockOn:
+		if throwing == false:
+			$BaseModel3D/MeshInstance3D/Bones_arm/Skeleton3D/CustomModifier.influence = 0.0
 		bone_rot = $enemy_radar.rotation
 	else:
+		if throwing == false:
+			$BaseModel3D/MeshInstance3D/Bones_arm/Skeleton3D/CustomModifier.influence = 0.45
 		if abs($UpperBody_skewer.rotation.y) >= PI / 2:
-			bone_rot.y = 0.0
+			bone_rot.y =  $UpperBody_skewer_true.global_rotation.y
 		elif abs($UpperBody_skewer.rotation.y) <= PI / 2:
 			bone_rot.y = $Camera/Camera3D.rotation.y - PI
 
 	bone_rot.x = -$Camera/Camera3D.rotation.x
 	bone_rot -= $BaseModel3D.rotation
 	bone_rot.y = wrapf(bone_rot.y, -PI, PI)
-
+	#bone_rot.y = clamp(bone_rot.y, -PI/2, PI/2)
+	if throwing == true:
+		bone_rot.y = $UpperBody_skewer_true.global_rotation.y
+		$UpperBody_skewer.global_rotation.y = $UpperBody_skewer_true.global_rotation.y
 	if abs(bone_rot.y) >= PI / 2:
-		bone_rot.y = 0.0
+		bone_rot.y = $UpperBody_skewer_true.global_rotation.y
+	# Smooth interpolation
 	$UpperBody_skewer.rotation = $UpperBody_skewer.rotation.lerp(bone_rot, 0.1)
 	
-	
+	if attacking == true:
+		$UpperBody_skewer.global_rotation.y = $UpperBody_skewer_true.global_rotation.y
 	if rotate_to_view == true and !attacking and !stunned:
 		$BaseModel3D.rotation.y = lerp_angle($BaseModel3D.rotation.y, $view.rotation.y, 0.1)
 	elif attacking and attack_timer >= attack_grace and !lockOn and !stunned and rotate_to_view == true:
@@ -216,9 +248,9 @@ func _handle_movement(delta):
 		velocity.x = lerpf(velocity.x, 0, 0.3)
 		velocity.z = lerpf(velocity.z, 0, 0.3)
 	#print(is_on_air)
-	if global_dir == Vector2(0,0) and current_state in ["jump_to_walk", "jump_to_idle"]:
-		velocity.x = lerpf(velocity.x, 0, 0.02)
-		velocity.z = lerpf(velocity.z, 0, 0.02)
+	#if global_dir == Vector2(0,0) and current_state in ["jump_to_walk", "jump_to_idle"]:
+		#velocity.x = lerpf(velocity.x, 0, 0.02)
+		#velocity.z = lerpf(velocity.z, 0, 0.02)
 		#print(velocity)
 	elif is_on_air:
 	#	$view.rotation.y = lerp_angle($view.rotation.y, target_rotation, 0.04)
@@ -236,7 +268,7 @@ func _handle_movement(delta):
 	if jump_buffer == 1.0 and current_state in ["idle", "walk", "idle_to_walk", "walk_to_idle"] or jump_buffer == 1.0 and is_on_floor() and current_state in ["jump_to_walk", "jump_to_idle", "run_to_idle"]:
 		if !staggered and is_moving == false and is_on_floor() and attacking == false and is_blocking == false and is_running == false and in_mode == false:
 			state_machine.travel("idle_to_jump")
-		if !staggered and is_moving == true and is_on_floor() and attacking == false and is_blocking == false and is_running == false and speed < 4.8:
+		if !staggered and is_moving == true and is_on_floor() and attacking == false and is_blocking == false and is_running == false:
 			state_machine.travel("walk_to_jump")
 		jump_time = 0
 		jump_start_pos = global_position.y
@@ -244,16 +276,16 @@ func _handle_movement(delta):
 		action_bar = 0
 		jump_buffer = 0
 		jump_activation = true
-
+		
 	if jump_activation == true:
 		jump_time = delta + jump_time
-		if jump_time > 0.2667:
-			velocity.y = 3.5
+		if jump_time > 0.2667 and is_on_floor():
+			velocity.y = 3.0
 			#print("velytrue")
 			is_on_air = true
 			is_jumping = false
 			jump_activation = false
-			jump_time = 0
+
 	if distance_to_ground > 2.0:
 		#print("flyingtrue")
 		is_on_air = true
@@ -261,6 +293,7 @@ func _handle_movement(delta):
 		state_machine.travel("Roll")
 		action_bar = 0
 func _handle_variables(delta):
+	#$Throw_test.global_rotation = $BaseModel3D/MeshInstance3D.global_rotation
 	var camattachment = $BaseModel3D/MeshInstance3D/Bones_arm/Skeleton3D/CameraAttachment
 	$Camera.global_transform.origin.x = lerp($Camera.global_transform.origin.x, camattachment.global_transform.origin.x, 0.0125)
 	$Camera.global_transform.origin.z = lerp($Camera.global_transform.origin.z, camattachment.global_transform.origin.z, 0.0125)
@@ -323,24 +356,25 @@ func _handle_variables(delta):
 	if time_since_engage >= 3 and conqueror_stacks > 0.1:
 		conqueror_stacks -= delta
 	#print(current_state, current_path)
-
 func _handle_animations(delta):
 	#print(distance_to_ground)
-	if distance_to_ground < 2.75 and velocity.y <= 0:
-		is_on_air = false
-		#print("settofalse")
-	#print(velocity.y, " ",distance_to_ground, " ", velocity)
-	#print("Are we moving? ", is_moving, "  Are we blocking? ", is_blocking, "  Are we running? ", is_running, "  Inning? ", in_mode, "  SEX>", is_on_floor(), "  are we attacking? ", attacking)
+	#if distance_to_ground < 0.75 and velocity.y <= 0:
+		#is_on_air = false
+
 	if is_moving == false and is_on_floor() and is_blocking == false and is_running == false and in_mode == true:
 		pass
 	if is_moving == false and is_on_floor() and attacking == false and is_blocking == false and is_running == false and in_mode == false:
 		pass
 	if is_moving == true and is_on_floor() and attacking == false and is_blocking == false and is_running == false and speed < 4.8:
 		pass
-	animationTree.set("parameters/StateMachine/conditions/in", !staggered and is_moving == false and is_on_floor() and is_running == false and in_mode == true and distance_to_ground < 2.0 and charge_attack == false)
-	animationTree.set("parameters/StateMachine/conditions/idle", !staggered and is_moving == false and attacking == false and is_blocking == false and is_running == false and distance_to_ground < 2.0 and in_mode == false)
-	animationTree.set("parameters/StateMachine/conditions/move", !staggered and is_moving == true and attacking == false and is_blocking == false and is_running == false and distance_to_ground < 2.0 and speed < 4.8 and speed > 0.3)
-	animationTree.set("parameters/StateMachine/conditions/run", !staggered and is_moving == true and is_on_floor() and attacking == false and is_blocking == false and is_running == true and distance_to_ground < 2.0 and speed >= 4.8)
+	animationTree.set("parameters/StateMachine/conditions/in", throwing == false and velocity.y <= 0 and !staggered and is_moving == false and is_on_floor() and is_running == false and in_mode == true and charge_attack == false)
+	animationTree.set("parameters/StateMachine/conditions/idle", throwing == false and velocity.y <= 0 and !staggered and is_moving == false and attacking == false and is_blocking == false and is_running == false and in_mode == false)
+	#animationTree.set("parameters/StateMachine/conditions/idlent", throwing == false and velocity.y <= 0 and !staggered and is_moving == false and attacking == false and is_blocking == false and is_running == false and in_mode == false)
+	animationTree.set("parameters/StateMachine/conditions/move", throwing == false and !staggered and is_moving == true and attacking == false and is_blocking == false and is_running == false and speed < 4.8 and is_on_floor())
+	#animationTree.set("parameters/StateMachine/conditions/movent", throwing == false and !staggered and is_moving == true and attacking == false and is_blocking == false and is_running == false and speed < 4.8 and is_on_floor())
+	
+	animationTree.set("parameters/StateMachine/conditions/run", throwing == false and !staggered and is_moving == true and is_on_floor() and attacking == false and is_blocking == false and is_running == true and speed >= 4.8)
+	animationTree.set("parameters/StateMachine/conditions/throw", throwing == true)
 	#print(is_on_floor())
 	pass 
 
@@ -372,7 +406,14 @@ func _handle_combat(delta):
 	if !attacking:
 		currentweapon.Hurt = false
 
-	match current_state: # Attack hurt frame code
+	match current_state: # Attack hurt frame code AND DEATH!!!! YARRR GRRRRR DEATHHH!!!
+		"throw":
+			throw_timer += delta
+			if throw_timer >= 0.16:
+				throw_weapon()
+				throw_timer = 0.0
+		"death_01":
+			damI = 0
 		"Attack_bash":
 			if instaslow == false:
 				attack_timer += delta
@@ -471,17 +512,17 @@ func _handle_combat(delta):
 			else:
 				currentweapon.Hurt = false
 
-	if shield_activation and !is_moving and !attacking and !is_running and !stunned:
+	if !throwing and shield_activation and !is_moving and !attacking and !is_running and !stunned:
 		state_machine.travel("shield_block_1")
 		if current_state == "shield_block_1":
 			is_blocking = true
-	if shield_activation and is_moving and !attacking and !is_running and !stunned:
+	if !throwing and shield_activation and is_moving and !attacking and !is_running and !stunned:
 		state_machine.travel("shield_block_walk")
 		is_blocking = true
-	if shield_activation and is_moving and !attacking and is_running and !stunned:
+	if !throwing and shield_activation and is_moving and !attacking and is_running and !stunned:
 		state_machine.travel("run_blocking")
 		is_blocking = true
-	if current_state != "shield_block_1" and current_state != "shield_block_walk" and current_state != "run_blocking" or shield_activation == false:
+	if throwing and current_state != "shield_block_1" and current_state != "shield_block_walk" and current_state != "run_blocking" or shield_activation == false:
 		is_blocking = false
 	if time_since_engage <= 10:
 		time_since_engage += delta
@@ -636,6 +677,8 @@ func handle_attack_release():
 	leftclick = false
 
 func _on_animation_tree_animation_started(anim_name):
+	if lockOn and anim_name in ["Attack_1", "Attack_2", "Attack_3", "Attack_4", "Attack_5", "Attack_6"]:
+		$BaseModel3D.rotation.y = lerp_angle($BaseModel3D.rotation.y, $enemy_radar.rotation.y, 0.75)
 	if anim_name in ["Attack_1_to_idle", "Attack_2_to_idle", "Attack_3_to_idle", "Attack_4_to_idle", "Attack_5_to_idle", "Attack_6_to_idle", "Attack_roll_to_idle", "H_Attack_1_to_in", "H_Attack_2_to_in"]:
 		attacking = false
 	if anim_name in ["H_Attack_2", "in_to_H_Attack_1", "Attack_1", "Attack_2", "Attack_3", "Attack_4", "Attack_5", "Attack_6", "Attack_roll", "Attack_C_1", "Attack_bash"]:
@@ -703,7 +746,8 @@ func _on_animation_tree_animation_started(anim_name):
 			if attack_buffer == 10 and !weaponCollidingWall and in_mode == false:
 				state_machine.travel("Attack_1")
 				attack_buffer = 0
-
+		"throw":
+			throw_timer = 0.0
 func _on_animation_tree_animation_finished(anim_name):
 	if lockOn and anim_name in ["Attack_1", "Attack_2", "Attack_3", "Attack_4", "Attack_5", "Attack_6"]:
 		$BaseModel3D.rotation.y = lerp_angle($BaseModel3D.rotation.y, $enemy_radar.rotation.y, 0.75)
@@ -882,3 +926,54 @@ func guard_break():
 	if is_blocking:
 		state_machine.travel("hit_cancel")
 		is_blocking = false
+
+func throw_weapon():
+	var thrown_weapon = null
+	throwable = throwableScene.instantiate()
+	add_child(throwable)
+	if lockOn == true:
+		throwable.target = closest_enemy
+	throwable.linear_velocity = Vector3.ZERO
+	throwable.angular_velocity = Vector3.ZERO
+	throwable.global_rotation = $BaseModel3D.global_rotation
+	throwable.global_rotation.x += $UpperBody_skewer.global_rotation.x / 1.6
+	#$Throw_test.global_rotation.x = 0
+	throwable.global_position = $BaseModel3D/MeshInstance3D/Bones_arm/Skeleton3D/LeftHandItem.global_position
+	thrown_weapon = currentweapon
+	currentweapon.reparent(throwable, true)
+	set_weapon("Fist")
+	var impulse = throwable.global_transform.basis.z * 25.0  # Forward is -Z in Godot
+	throwable.apply_central_impulse(impulse)
+	if throwable.target:
+		throwable.look_at(throwable.target.global_position, Vector3.UP)
+	thrown_weapon.thrown = true
+func set_weapon(weapon_name):
+	match weapon_name:
+		"Fist":
+			prev_weapon = currentweapon
+			LeftHandItem = "Fists"
+			fists = fistScene.instantiate()
+			LHI_bone.remove_child(prev_weapon)
+			LHI_bone.add_child(fists)
+			currentweapon = LHI_bone.get_child(0)
+		"BoTRK":
+			prev_weapon = currentweapon
+			LeftHandItem = "BoTRK"
+			botrk = botrkScene.instantiate()
+			LHI_bone.remove_child(prev_weapon)
+			LHI_bone.add_child(botrk)
+			currentweapon = LHI_bone.get_child(0)
+			currentweapon.position = Vector3(-0.108, 0.1, -0.05)
+			currentweapon.rotation = Vector3(deg_to_rad(-0.7), deg_to_rad(-12.4), deg_to_rad(-87.6))
+		"CometSpear":
+			prev_weapon = currentweapon
+			LeftHandItem = "CometSpear"
+			cometspear = spearScene.instantiate()
+			LHI_bone.remove_child(prev_weapon)
+			LHI_bone.add_child(cometspear)
+			currentweapon = LHI_bone.get_child(0)
+			currentweapon.position = Vector3(0.28, 0.1, -0.04)
+			currentweapon.rotation = Vector3(deg_to_rad(11), deg_to_rad(2), deg_to_rad(-90))
+
+func two_fps() -> void:
+	print("sex")

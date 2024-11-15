@@ -1,8 +1,11 @@
 @tool
 extends AnimationTree
-
+@export var setactive: bool
 func _process(delta: float) -> void:
-	set_active(true)
+	if setactive == false:
+		set_active(false)
+	else:
+		set_active(true)
 #func _process(delta):
 		#if name == "FistsAnimTree" and owner.LeftHandItem == "Fists":
 			#self.set_active(true)
